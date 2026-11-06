@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-11-06 — Git Kurulumu
+
+### Eklendi
+- `.gitignore`: Unity standardı (Library/, Temp/, Logs/, UserSettings/, Obj/, Build/ vb. hariç).
+- İlk commit: "d20zaroyunu" (69 dosya).
+
 ## 2026-11-06 — Hata Düzeltme
 
 ### Düzeltildi
