@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,14 +8,16 @@ public class DraftUIController : MonoBehaviour
 {
     public SlotUI[] slotUIs = new SlotUI[5];
     public CardDragDrop[] handCards = new CardDragDrop[5];
+    public OpponentCardUI[] opponentCards = new OpponentCardUI[5];
     public ThrowableDice2D dice;
     public Text phaseText;
     public Text possessionText;
     public Text resultText;
-    public Button rollButton;
+    public Text warningText;
 
     MatchTurnManager manager;
     readonly Dictionary<AttackPhase, List<CardData>> decks = new Dictionary<AttackPhase, List<CardData>>();
+    Coroutine aiRoutine;
     string message = "";
 
     void Start()
@@ -30,12 +33,11 @@ public class DraftUIController : MonoBehaviour
 
         manager.OnDiceRolled += HandleDiceRolled;
         manager.OnPhaseChanged += phase => manager.deck = decks[phase];
-        manager.OnPossessionChanged += p => { if (p == Possession.Opponent) message += "\nTop rakibe geçti!"; };
-        manager.OnGoalScored += () => message = "GOOOL!";
+        manager.OnPossessionChanged += p => message += p == Possession.Opponent ? "\nTop rakibe geçti!" : "\nTop sana geçti!";
+        manager.OnGoalScored += () => message += "\nGOOOL!";
 
         dice.OnThrown += HandleThrown;
         dice.OnResolved += HandleResolved;
-        rollButton.onClick.AddListener(dice.ThrowRandom);
 
         manager.deck = decks[AttackPhase.Phase1_Prep];
         manager.StartTurn();
@@ -58,22 +60,25 @@ public class DraftUIController : MonoBehaviour
         for (int i = 0; i < 5 && i < cards.Length; i++)
             if (handCards[i] == null) handCards[i] = cards[i];
 
-        if (rollButton == null)
-        {
-            var go = GameObject.Find("RollButton");
-            if (go != null) rollButton = go.GetComponent<Button>();
-        }
+        var opp = FindObjectsByType<OpponentCardUI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        System.Array.Sort(opp, (a, b) => string.CompareOrdinal(a.name, b.name));
+        if (opponentCards == null || opponentCards.Length != 5) opponentCards = new OpponentCardUI[5];
+        for (int i = 0; i < 5 && i < opp.Length; i++)
+            if (opponentCards[i] == null) opponentCards[i] = opp[i];
+
         if (phaseText == null) phaseText = FindText("PhaseText");
         if (possessionText == null) possessionText = FindText("PossessionText");
         if (resultText == null) resultText = FindText("ResultText");
+        if (warningText == null) warningText = FindText("WarningText");
 
         if (dice != null && dice.manager == null) dice.manager = manager;
         foreach (var s in slotUIs)
             if (s != null && s.manager == null) s.manager = manager;
 
-        if (dice == null || rollButton == null || phaseText == null || possessionText == null || resultText == null) return false;
+        if (dice == null || phaseText == null || possessionText == null || resultText == null) return false;
         foreach (var s in slotUIs) if (s == null) return false;
         foreach (var c in handCards) if (c == null) return false;
+        foreach (var o in opponentCards) if (o == null) return false;
         return true;
     }
 
@@ -83,8 +88,23 @@ public class DraftUIController : MonoBehaviour
         return go != null ? go.GetComponent<Text>() : null;
     }
 
+    void Update()
+    {
+        bool playerTurn = manager.CurrentPossession == Possession.Player;
+        bool filled = manager.AllSlotsFilled;
+
+        dice.SetLocked(!(filled && playerTurn));
+
+        if (warningText != null)
+        {
+            warningText.gameObject.SetActive(!playerTurn || !filled);
+            warningText.text = playerTurn ? "Tüm slotlara kart yerleştirin!" : "Rakip oynuyor...";
+        }
+    }
+
     void HandleThrown()
     {
+        CardDragDrop.DragLocked = true;
         foreach (var s in slotUIs) s.ClearHighlight();
         message = "";
         resultText.text = "";
@@ -94,8 +114,9 @@ public class DraftUIController : MonoBehaviour
     {
         if (slotIndex >= 0) slotUIs[slotIndex].SetHighlight(success);
 
+        string who = manager.CurrentPossession == Possession.Player ? "Sen" : "Rakip";
         var card = slotIndex >= 0 ? manager.slots[slotIndex].currentCard : null;
-        message = $"Zar: {roll} → Slot {slotIndex}: {(card != null ? card.cardName : "BOŞ")}\n" +
+        message = $"{who} - Zar: {roll} → Slot {slotIndex}: {(card != null ? card.cardName : "BOŞ")}\n" +
                   (success ? "BAŞARILI! Faz ilerliyor." : "BAŞARISIZ!");
     }
 
@@ -103,25 +124,63 @@ public class DraftUIController : MonoBehaviour
     {
         DealHand();
         UpdateTexts();
+
+        if (manager.CurrentPossession == Possession.Opponent)
+        {
+            if (aiRoutine != null) StopCoroutine(aiRoutine);
+            aiRoutine = StartCoroutine(OpponentTurn());
+        }
+    }
+
+    IEnumerator OpponentTurn()
+    {
+        yield return new WaitForSeconds(1.2f);
+
+        var hand = new List<CardData>(manager.hand);
+        var order = new List<int>();
+        for (int i = 0; i < slotUIs.Length; i++) order.Add(i);
+        for (int i = order.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
+
+        for (int k = 0; k < hand.Count && k < order.Count; k++)
+        {
+            int slot = order[k];
+            if (manager.PlaceCard(hand[k], slot)) slotUIs[slot].SetAICard(hand[k]);
+            yield return new WaitForSeconds(0.35f);
+        }
+
+        yield return new WaitForSeconds(0.7f);
+        dice.AutoThrow();
     }
 
     void DealHand()
     {
         var dealt = new List<CardData>(manager.hand);
+        bool playerTurn = manager.CurrentPossession == Possession.Player;
 
         foreach (var s in slotUIs) s.ClearOccupant();
 
         for (int i = 0; i < handCards.Length; i++)
         {
             handCards[i].ResetToHome();
-            handCards[i].Bind(i < dealt.Count ? dealt[i] : null);
+            if (playerTurn) handCards[i].Bind(i < dealt.Count ? dealt[i] : null);
+            else handCards[i].ShowBack();
+
+            if (playerTurn) opponentCards[i].ShowBack();
+            else opponentCards[i].ShowFace(i < dealt.Count ? dealt[i] : null);
         }
+
+        CardDragDrop.DragLocked = !playerTurn;
     }
 
     void UpdateTexts()
     {
+        bool playerTurn = manager.CurrentPossession == Possession.Player;
         phaseText.text = $"FAZ: {manager.CurrentPhase}";
-        possessionText.text = $"TOP: {(manager.CurrentPossession == Possession.Player ? "SENDE" : "RAKİPTE")}";
+        possessionText.text = $"SIRA: {(playerTurn ? "SENDE" : "RAKİPTE")}";
         resultText.text = message;
     }
 

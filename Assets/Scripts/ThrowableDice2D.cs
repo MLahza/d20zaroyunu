@@ -11,30 +11,44 @@ public class ThrowableDice2D : MonoBehaviour, IPointerDownHandler, IDragHandler,
     public MatchTurnManager manager;
 
     public float pixelsPerUnit = 100f;
-    public float powerMultiplier = 6f;
-    public float maxPullPixels = 200f;
-    public float minPullPixels = 15f;
     public float wallThickness = 1f;
     public float settleSpeed = 0.1f;
+    public float followGain = 25f;
+    public float maxHoldSpeed = 40f;
+    public float throwBoost = 1.3f;
+    public float minThrowSpeed = 3f;
+    public float maxThrowSpeed = 28f;
     public float torqueImpulse = 10f;
+    public float linearDamping = 1.5f;
 
     public event Action OnThrown;
     public event Action OnResolved;
 
+    public bool Locked { get; private set; } = true;
+    public bool IsRolling => rolling;
+
+    static readonly Color UnlockedColor = Color.white;
+    static readonly Color LockedColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+
+    Image image;
     RectTransform diceRect;
     Rigidbody2D body;
-    RectTransform aimLine;
     Vector2 origin = new Vector2(500f, 500f);
-    bool ready, aiming, rolling;
+    Vector2 holdTarget;
+    bool ready, holding, rolling;
     float rollTimer, stillTimer, flickerTimer;
 
     IEnumerator Start()
     {
         diceRect = (RectTransform)transform;
+        image = GetComponent<Image>();
+        image.sprite = D20Sprite.Get();
+        image.preserveAspect = true;
+        SetLocked(Locked);
+
         yield return new WaitForEndOfFrame();
         Canvas.ForceUpdateCanvases();
         BuildPhysics();
-        BuildAimLine();
         ready = true;
     }
 
@@ -60,7 +74,7 @@ public class ThrowableDice2D : MonoBehaviour, IPointerDownHandler, IDragHandler,
 
         body = bodyGo.AddComponent<Rigidbody2D>();
         body.gravityScale = 0f;
-        body.linearDamping = 1.2f;
+        body.linearDamping = linearDamping;
         body.angularDamping = 0.8f;
         body.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         body.interpolation = RigidbodyInterpolation2D.Interpolate;
@@ -81,16 +95,14 @@ public class ThrowableDice2D : MonoBehaviour, IPointerDownHandler, IDragHandler,
         box.sharedMaterial = mat;
     }
 
-    void BuildAimLine()
+    void FixedUpdate()
     {
-        var go = new GameObject("AimLine", typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(area, false);
-        aimLine = (RectTransform)go.transform;
-        aimLine.anchorMin = aimLine.anchorMax = aimLine.pivot = new Vector2(0.5f, 0.5f);
-        var img = go.GetComponent<Image>();
-        img.color = new Color(1f, 1f, 1f, 0.8f);
-        img.raycastTarget = false;
-        go.SetActive(false);
+        if (!ready || !holding) return;
+
+        Vector2 targetWorld = origin + holdTarget / pixelsPerUnit;
+        Vector2 v = (targetWorld - body.position) * followGain;
+        body.linearVelocity = Vector2.ClampMagnitude(v, maxHoldSpeed);
+        body.angularVelocity = 0f;
     }
 
     void Update()
@@ -116,33 +128,46 @@ public class ThrowableDice2D : MonoBehaviour, IPointerDownHandler, IDragHandler,
         if (stillTimer > 0.2f || rollTimer > 12f) Settle();
     }
 
+    public void SetLocked(bool locked)
+    {
+        Locked = locked;
+        if (image != null) image.color = locked ? LockedColor : UnlockedColor;
+
+        if (locked && holding) ReleaseHold(false);
+    }
+
     public void OnPointerDown(PointerEventData eventData)
     {
-        if (!ready || rolling) return;
-        aiming = true;
-        body.linearVelocity = Vector2.zero;
-        body.angularVelocity = 0f;
-        aimLine.gameObject.SetActive(true);
-        UpdateAim(eventData);
+        if (!ready || rolling || Locked) return;
+
+        holding = true;
+        holdTarget = PointerLocal(eventData);
+        body.linearDamping = 0f;
     }
 
     public void OnDrag(PointerEventData eventData)
     {
-        if (aiming) UpdateAim(eventData);
+        if (holding) holdTarget = PointerLocal(eventData);
     }
 
     public void OnPointerUp(PointerEventData eventData)
     {
-        if (!aiming) return;
-        aiming = false;
-        aimLine.gameObject.SetActive(false);
+        if (holding) ReleaseHold(true);
+    }
 
-        Vector2 pull = diceRect.anchoredPosition - PointerLocal(eventData);
-        float mag = pull.magnitude;
-        if (mag < minPullPixels) return;
+    void ReleaseHold(bool allowThrow)
+    {
+        holding = false;
+        body.linearDamping = linearDamping;
 
-        float speed = Mathf.Min(mag, maxPullPixels) / pixelsPerUnit * powerMultiplier;
-        Launch(pull.normalized * speed);
+        Vector2 v = body.linearVelocity * throwBoost;
+        if (!allowThrow || v.magnitude < minThrowSpeed)
+        {
+            body.linearVelocity = Vector2.zero;
+            return;
+        }
+
+        Launch(Vector2.ClampMagnitude(v, maxThrowSpeed));
     }
 
     Vector2 PointerLocal(PointerEventData e)
@@ -151,19 +176,10 @@ public class ThrowableDice2D : MonoBehaviour, IPointerDownHandler, IDragHandler,
         return p;
     }
 
-    void UpdateAim(PointerEventData e)
-    {
-        Vector2 a = diceRect.anchoredPosition;
-        Vector2 d = PointerLocal(e) - a;
-        aimLine.anchoredPosition = a + d * 0.5f;
-        aimLine.sizeDelta = new Vector2(d.magnitude, 6f);
-        aimLine.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
-    }
-
-    public void ThrowRandom()
+    public void AutoThrow()
     {
         if (!ready || rolling) return;
-        Launch(UnityEngine.Random.insideUnitCircle.normalized * UnityEngine.Random.Range(8f, 14f));
+        Launch(UnityEngine.Random.insideUnitCircle.normalized * UnityEngine.Random.Range(10f, 20f));
     }
 
     void Launch(Vector2 velocity)
@@ -173,7 +189,8 @@ public class ThrowableDice2D : MonoBehaviour, IPointerDownHandler, IDragHandler,
 
         body.linearVelocity = velocity;
         body.angularVelocity = 0f;
-        body.AddTorque(UnityEngine.Random.Range(0.6f, 1f) * torqueImpulse * (UnityEngine.Random.value < 0.5f ? -1f : 1f), ForceMode2D.Impulse);
+        float speedFactor = Mathf.Clamp(velocity.magnitude / 10f, 0.6f, 1.5f);
+        body.AddTorque(UnityEngine.Random.Range(0.6f, 1f) * torqueImpulse * speedFactor * (UnityEngine.Random.value < 0.5f ? -1f : 1f), ForceMode2D.Impulse);
 
         OnThrown?.Invoke();
     }

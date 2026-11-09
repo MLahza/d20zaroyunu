@@ -47,6 +47,16 @@ public class MatchTurnManager : MonoBehaviour
         return true;
     }
 
+    public bool AllSlotsFilled
+    {
+        get
+        {
+            for (int i = 0; i < slots.Length; i++)
+                if (slots[i].currentCard == null) return false;
+            return true;
+        }
+    }
+
     public bool RemoveCardFromSlot(int slotIndex)
     {
         if (slotIndex < 0 || slotIndex >= HandSize || slots[slotIndex].currentCard == null) return false;
@@ -67,8 +77,10 @@ public class MatchTurnManager : MonoBehaviour
         OnDiceRolled?.Invoke(roll, slot != null ? slot.slotIndex : -1, success);
 
         if (success) AdvancePhase();
-        else SwitchPossession(Possession.Opponent);
+        else SwitchPossession(Other(CurrentPossession));
     }
+
+    static Possession Other(Possession p) => p == Possession.Player ? Possession.Opponent : Possession.Player;
 
     CardSlot FindSlot(int roll)
     {
@@ -82,7 +94,7 @@ public class MatchTurnManager : MonoBehaviour
         if (CurrentPhase == AttackPhase.Phase3_Finish)
         {
             OnGoalScored?.Invoke();
-            ResetAttack();
+            SwitchPossession(Other(CurrentPossession));
             return;
         }
 

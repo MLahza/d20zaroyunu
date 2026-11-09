@@ -8,9 +8,11 @@ public class SlotUI : MonoBehaviour, IDropHandler
     public MatchTurnManager manager;
     public Image background;
     public Text label;
-    public float labelInset = 36f;
+    public Text aiText;
+    public float labelFraction = 0.13f;
 
     public CardDragDrop Occupant { get; private set; }
+    public float InsetPixels => ((RectTransform)transform).rect.height * labelFraction;
 
     static readonly Color Idle = new Color(0.15f, 0.25f, 0.45f, 0.95f);
     static readonly Color Empty = new Color(0.2f, 0.2f, 0.2f, 0.9f);
@@ -18,6 +20,7 @@ public class SlotUI : MonoBehaviour, IDropHandler
     static readonly Color HitFail = new Color(0.85f, 0.2f, 0.2f, 1f);
 
     Color? highlight;
+    bool aiOccupied;
 
     public void OnDrop(PointerEventData eventData)
     {
@@ -42,6 +45,15 @@ public class SlotUI : MonoBehaviour, IDropHandler
     public void ClearOccupant()
     {
         Occupant = null;
+        aiOccupied = false;
+        if (aiText != null) aiText.text = "";
+        Refresh();
+    }
+
+    public void SetAICard(CardData card)
+    {
+        aiOccupied = true;
+        if (aiText != null) aiText.text = $"<b>{card.cardName}</b>\nGüç: {card.powerValue}";
         Refresh();
     }
 
@@ -59,6 +71,6 @@ public class SlotUI : MonoBehaviour, IDropHandler
 
     void Refresh()
     {
-        background.color = highlight ?? (Occupant != null ? Idle : Empty);
+        background.color = highlight ?? (Occupant != null || aiOccupied ? Idle : Empty);
     }
 }

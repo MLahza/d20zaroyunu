@@ -1,5 +1,60 @@
 # CHANGELOG
 
+## 2026-11-09 — Gerçek Kart Görünümü ve Yelpaze Dizilimi
+
+### Eklendi
+- `CardView.cs`: Kart yüzü (isim bandı, türe göre renkli görsel alanı + tür etiketi, açıklama kutusu, güç çubuğu) ve kart arkası. Pozitif kartlar altın, negatif kartlar kırmızı çerçeve.
+
+### Güncellendi
+- `AutoSceneBuilder.cs`: Kartlar portre oranında (~0.7) ve çok parçalı yapıda üretilir (`BuildCardFace`). El ve rakip kartları yelpaze gibi hafif eğimli (±10°) ve kavisli dizilir, birbirine hafif biner.
+- `CardDragDrop.cs`: Metin/renk yerine `CardView` kullanır; ev rotasyonunu saklar. Sürüklerken düzleşir, geri dönünce eğimini geri alır.
+- `OpponentCardUI.cs`: `CardView` kullanır.
+
+### Not
+- **Tools > Setup Full Game Scene** menüsü yeniden çalıştırılmalı.
+
+## 2026-11-09 — Kompakt Düzen, Rakip Kartları, Tut-Çek-Bırak D20
+
+### Eklendi
+- `OpponentCardUI.cs`: Rakip kartı (kapalı "?" / açık yüz).
+- `D20Sprite.cs`: Çalışma anında üretilen D20 görseli (altıgen siluet + iç üçgen yüzey çizgileri).
+
+### Güncellendi
+- `AutoSceneBuilder.cs`: Slotlar ve kartlar küçültüldü, 5 sütun ortak hizada (rakip kartları üstte, slotlar ortada, oyuncu eli altta). Zar paneli büyütüldü.
+- `DraftUIController.cs`: Sıra kimdeyse onun kartları açık, diğer tarafın kartları kapalı görünür. Rakip sırasında AI kartları rastgele slotlara dizer ve zarı kendisi atar. Sıra rakipteyken oyuncu zarı kilitli, uyarı "Rakip oynuyor...".
+- `ThrowableDice2D.cs`: Sapan yerine fare/dokunmatikle zara basılı tutup sürükle-bırak; bırakma anındaki hız ile fırlar (çok yavaşsa atış sayılmaz). D20 görseli kullanılır. Rastgele `AddTorque`, duvarlardan sekme, durunca 1-20 sonuç ve slot tetikleme korunur. `AutoThrow()` yalnızca AI için.
+- `MatchTurnManager.cs`: Başarısız atışta top karşı tarafa geçer ve tekrar geri döner (toggle); gol sonrası da sıra değişir.
+- `SlotUI.cs`: AI kartını gösteren `aiText` / `SetAICard()`.
+- `CardDragDrop.cs`: `ShowBack()`; snap yatay payı sabit 12 px.
+
+### Not
+- **Tools > Setup Full Game Scene** menüsü yeniden çalıştırılmalı.
+
+## 2026-11-09 — "ZAR AT" Butonu Kaldırıldı
+
+### Kaldırıldı
+- `AutoSceneBuilder.cs` / `DraftUIController.cs`: "ZAR AT" butonu ve `rollButton` referansları. Zar yalnızca fare/dokunmatik ile geri çekip bırakarak (Drag & Throw) atılır.
+
+### Güncellendi
+- `AutoSceneBuilder.cs`: Zar alanı butonun boşalttığı yere genişletildi (DiceArea y: 0.22–0.84); `WarningText` panelin altına taşındı.
+- Mevcut (önceki adımlardan): duvarlı `BoxCollider2D` zar alanı, `Rigidbody2D` + sekme özellikli `PhysicsMaterial2D`, `AddTorque`, durunca 1-20 sonuç + slot tetikleme (`ThrowableDice2D.cs`), 5 slot dolmadan zar kilidi (`SetLocked`) korunmuştur.
+
+### Not
+- **Tools > Setup Full Game Scene** menüsü yeniden çalıştırılmalı.
+
+## 2026-11-08 — UI Düzeni ve Tur Hazırlık Kuralı
+
+### Güncellendi
+- `AutoSceneBuilder.cs`: Yerleşim yeniden düzenlendi (ortak sol kenar boşluğu, 5 eşit sütun + sabit boşluk; slotlar/kartlar/sonuç metni/zar paneli üst üste binmez). Zar paneline `WarningText` ve devre dışı renkli "ZAR AT" butonu eklendi.
+- `CardDragDrop.cs`: Slota bırakınca kart 0.15 sn'lik SmoothStep animasyonuyla slot merkezine oturur ve ölçeklenir (üst etiket bandı simetrik boşlukla). Zar atılırken kart sürükleme kilitlenir (`DragLocked`).
+- `SlotUI.cs`: `labelInset` yerine `labelFraction` / `InsetPixels` (çözünürlükten bağımsız).
+- `MatchTurnManager.cs`: `AllSlotsFilled` özelliği eklendi.
+- `ThrowableDice2D.cs`: `Locked` / `IsRolling` / `SetLocked()`; kilitliyken zar sürüklenemez/fırlatılamaz ve gri görünür.
+- `DraftUIController.cs`: Her karede 5 slotun doluluğu denetlenir; boşsa zar + "ZAR AT" kilitli ve "Tüm slotlara kart yerleştirin!" uyarısı görünür, dolunca zar aktifleşir ve uyarı gizlenir.
+
+### Not
+- Yeni yerleşim için **Tools > Setup Full Game Scene** menüsü yeniden çalıştırılmalı.
+
 ## 2026-11-06 — Git Kurulumu
 
 ### Eklendi
